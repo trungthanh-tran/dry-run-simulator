@@ -1,0 +1,5 @@
+# requirements.txt
+python-dotenv==1.0.1
+SQLAlchemy==2.0.30
+python-telegram-bot==21.0.1
+solana==0.31.0  # Changed from 0.30.0 to 0.31.0
