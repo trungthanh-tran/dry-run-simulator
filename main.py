@@ -64,9 +64,9 @@ async def buy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     try:
         ca_address = args[0]
         target_mc_usd = float(args[1])
-        percent_of_wallet = float(args[2])
+        sol_in = float(args[2])
 
-        if not (0 < percent_of_wallet <= 1):
+        if not (0 < sol_in <= 1):
             await update.message.reply_text("Percentage of wallet must be between 0 (exclusive) and 1 (inclusive).")
             return
 
@@ -74,12 +74,12 @@ async def buy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(
             f"Received buy command for CA: `{ca_address}`\n"
             f"Target MC: `${target_mc_usd:,.2f}`\n"
-            f"Using: {percent_of_wallet} SOL\n"
+            f"Using: {sol_in} SOL\n"
             f"Initiating monitoring...",
             parse_mode="HTML"
         )
         # Call the TradingBot's method to handle the buy logic
-        await trading_bot_instance.handle_buy_command(ca_address, target_mc_usd, percent_of_wallet)
+        await trading_bot_instance.handle_buy_command(ca_address, target_mc_usd, sol_in)
 
     except ValueError:
         await update.message.reply_text(

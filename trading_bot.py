@@ -42,16 +42,16 @@ class TradingBot:
                 pass # This is expected when the generator is exhausted
 
 
-    async def handle_buy_command(self, ca_address: str, target_mc_usd: float, percent_of_wallet: float):
+    async def handle_buy_command(self, ca_address: str, target_mc_usd: float, sol_in: float):
         """
         Handles the /buy command.
         Monitors the CA and executes a buy when conditions are met.
         """
-        logging.info(f"Handling buy command for CA: {ca_address}, Target MC: ${target_mc_usd}, Percent of wallet: {percent_of_wallet}")
+        logging.info(f"Handling buy command for CA: {ca_address}, Target MC: ${target_mc_usd}, Percent of wallet: {sol_in}")
         await self.notifier.send_message(
             f"🟢 Initiating monitoring for buy on CA: `{ca_address}`"
             f"Target Market Cap: `${target_mc_usd:,.2f}`"
-            f"Using: `{percent_of_wallet * 100:.2f}%` of wallet"
+            f"Using: {sol_in} SOL"
             f"Waiting for favorable conditions..."
         )
 
@@ -65,13 +65,13 @@ class TradingBot:
                     await self.notifier.send_message(f"⚠️ A trade for CA `{ca_address}` is already ACTIVE. Please sell it first or wait for it to complete.")
                     return
 
-            await self._monitor_and_buy(ca_address, target_mc_usd, percent_of_wallet)
+            await self._monitor_and_buy(ca_address, target_mc_usd, sol_in)
 
         except Exception as e:
             logging.error(f"Error in handle_buy_command for {ca_address}: {e}", exc_info=True)
             await self.notifier.send_message(f"🚨 An error occurred during buy command for `{ca_address}`: `{e}`")
 
-    async def _monitor_and_buy(self, ca_address: str, target_mc_usd: float, percent_of_wallet: float):
+    async def _monitor_and_buy(self, ca_address: str, target_mc_usd: float, sol_in: float):
         """Monitors token market cap and executes a buy."""
         # Check if CA exists
         try:
@@ -104,10 +104,11 @@ class TradingBot:
 
                 # Proceed with buy logic if MC condition met or skipped
                 sol_balance = await self.jupiter_client.get_sol_balance()
-                sol_to_spend = sol_balance * percent_of_wallet
-
+                sol_to_spend = sol_in
+                if sol_balance < sol_in:
+                    sol_to_spend = 0
                 if sol_to_spend == 0:
-                    await self.notifier.send_message("❌ Your wallet has 0 SOL or allocated percentage is 0. Cannot proceed with buy.")
+                    await self.notifier.send_message("❌ Your wallet has enough SOL. Cannot proceed with buy.")
                     return
 
                 # Convert SOL amount to lamports
@@ -135,7 +136,7 @@ class TradingBot:
                         buy_price_sol=initial_sol_value, # SOL spent to acquire this CA amount
                         ca_amount_bought=ca_amount_bought,
                         target_mc_usd=target_mc_usd, # Still store target_mc_usd for reference
-                        percent_of_wallet=percent_of_wallet,
+                        percent_of_wallet=sol_in,
                         status="ACTIVE",
                         initial_sol_value=initial_sol_value,
                         realized_pnl=0.0 # Initialize PnL to 0

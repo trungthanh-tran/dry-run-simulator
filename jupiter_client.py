@@ -32,7 +32,7 @@ async def get_token_decimals(client: AsyncClient, mint_address: str) -> int:
     """
     try:
         # Convert string mint address to PublicKey
-        token_mint_address = Pubkey(mint_address)
+        token_mint_address = Pubkey.from_string(mint_address)
         
         # Get the account information for the token mint
         account_info = await client.get_account_info(token_mint_address)
@@ -46,6 +46,27 @@ async def get_token_decimals(client: AsyncClient, mint_address: str) -> int:
             
     except ValueError as e:
         raise ValueError(f"Invalid mint address or failed to fetch data: {str(e)}")
+
+async def get_total_supply(client: AsyncClient, mint_address: str) -> float:
+    """
+    Retrieve the total supply of an SPL token asynchronously.
+    Returns the supply adjusted for decimals.
+    """
+    try:
+        mint_pubkey = Pubkey.from_string(mint_address)
+        async with AsyncClient("https://api.mainnet-beta.solana.com") as client:
+            response = await client.get_token_supply(mint_pubkey)
+            
+            if response.value:
+                supply = response.value.amount
+                decimals = response.value.decimals
+                # Convert raw amount to human-readable (adjusted for decimals)
+                return int(supply) / (10 ** decimals)
+            else:
+                raise Exception("Failed to fetch token supply")
+    except Exception as e:
+        print(f"Error fetching total supply: {e}")
+        return 0.0
 
 class JupiterSwapClient:
     def __init__(self):
@@ -97,6 +118,7 @@ class JupiterSwapClient:
         Fetches the market cap and price of a given token using Jupiter API for price and HTTP APIs for supply.
         Returns (market_cap_usd, token_price_usd)
         """
+        solana_client = AsyncClient("https://api.mainnet-beta.solana.com")
         if mint_address == WSOL_MINT_ADDRESS:  # For SOL, use cached SOL price
             sol_price = await self._get_sol_price_usd()
             # Placeholder for SOL market cap (rough estimate)
@@ -120,39 +142,7 @@ class JupiterSwapClient:
                 return None, None
 
             # Fetch circulating supply
-            circulating_supply = None
-            # Try CoinGecko first
-            coingecko_id = None
-            if mint_address == "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4":
-                coingecko_id = "jupiter"
-            elif mint_address == "BVG3BJH4ghUPJT9mCi7JbziNwx3dqRTzgo9x5poGpump":
-                coingecko_id = None  # Pump.fun tokens often not on CoinGecko
-                logging.warning(f"No CoinGecko ID for {mint_address}. Falling back to Solscan.")
-            else:
-                logging.warning(f"No CoinGecko ID mapped for {mint_address}. Falling back to Solscan.")
-
-            if coingecko_id:
-                coingecko_url = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}"
-                response = requests.get(coingecko_url)
-                if response.status_code == 200:
-                    data = response.json()
-                    circulating_supply = float(data.get("market_data", {}).get("circulating_supply", 0))
-                    if circulating_supply <= 0:
-                        logging.warning(f"No circulating supply data for {coingecko_id} on CoinGecko.")
-                        circulating_supply = None
-
-            # Fallback to Solscan for supply (total supply as proxy)
-            if circulating_supply is None:
-                solscan_url = f"https://public-api.solscan.io/token/meta?tokenAddress={mint_address}"
-                response = requests.get(solscan_url)
-                if response.status_code == 200:
-                    data = response.json()
-                    total_supply = float(data.get("supply", 0))
-                    decimals = int(data.get("decimals", 6))  # Default to 6 if not provided
-                    circulating_supply = total_supply / (10**decimals)
-                else:
-                    logging.warning(f"Failed to fetch supply for {mint_address} from Solscan: {response.status_code}")
-                    return None, token_price_usd
+            circulating_supply = await get_total_supply(solana_client, mint_address)
 
             if circulating_supply <= 0:
                 logging.warning(f"No valid circulating supply for {mint_address}.")
