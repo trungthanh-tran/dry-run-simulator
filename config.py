@@ -24,6 +24,7 @@ SCHEDULED_TASK_INTERVAL_SECONDS = int(os.getenv("SCHEDULED_TASK_INTERVAL_SECONDS
 # Solana Constants
 WSOL_MINT_ADDRESS = "So11111111111111111111111111111111111111112"
 SOL_DECIMALS = 9 # SOL is 9 decimals
+JUPITER_API_URL = "https://quote-api.jup.ag/v6"
 
 # Validate essential configurations
 # PRIVATE_KEY_BASE58 is not essential if DRY_RUN is True
