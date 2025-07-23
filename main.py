@@ -1,6 +1,7 @@
 # main.py
 import asyncio
 import logging
+import sys
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -23,8 +24,10 @@ trading_bot_instance = TradingBot()
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends a welcome message when the /start command is issued."""
     user = update.effective_user
+    # Escape markdown for user mention, as it might contain special chars
+    escaped_username = user.mention_markdown_v2().replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace('`', '\\`')
     await update.message.reply_markdown_v2(
-        f"Hi {user.mention_markdown_v2()}!\n\n"
+        f"Hi {escaped_username}!\n\n"
         "I'm your Solana trading bot\\. Use /help to see available commands\\."
     )
 
@@ -49,10 +52,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def buy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles the /buy command from Telegram."""
     args = context.args
+    logging.error(f"{args}")
     if len(args) != 3:
         await update.message.reply_text(
-            "Usage: `/buy <CA_ADDRESS> <TARGET_MC_USD> <PERCENT_OF_WALLET>`\n"
-            "Example: `/buy EoNnC... 100000 0.5`"
+            "Usage: `/buy <CA_ADDRESS> <TARGET_MC_USD> <SOL>`\n"
+            "Example: `/buy EoNnC... 100000 0.5`",
+            parse_mode="HTML"
         )
         return
 
@@ -69,9 +74,9 @@ async def buy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(
             f"Received buy command for CA: `{ca_address}`\n"
             f"Target MC: `${target_mc_usd:,.2f}`\n"
-            f"Using: `{percent_of_wallet * 100:.2f}%` of wallet\n"
+            f"Using: {percent_of_wallet} SOL\n"
             f"Initiating monitoring...",
-            parse_mode="MarkdownV2"
+            parse_mode="HTML"
         )
         # Call the TradingBot's method to handle the buy logic
         await trading_bot_instance.handle_buy_command(ca_address, target_mc_usd, percent_of_wallet)
@@ -79,81 +84,87 @@ async def buy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     except ValueError:
         await update.message.reply_text(
             "Invalid arguments. Please ensure `TARGET_MC_USD` and `PERCENT_OF_WALLET` are valid numbers.",
-            parse_mode="MarkdownV2"
+            parse_mode="HTML"
         )
     except Exception as e:
         logging.error(f"Error in /buy command: {e}", exc_info=True)
-        await update.message.reply_text(f"An unexpected error occurred while processing your buy command: `{e}`", parse_mode="MarkdownV2")
+        await update.message.reply_text(f"An unexpected error occurred while processing your buy command: `{e}`", parse_mode="HTML")
 
 async def sell_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles the /sell command from Telegram."""
     args = context.args
     if len(args) != 1:
-        await update.message.reply_text("Usage: `/sell <CA_ADDRESS>`\nExample: `/sell EoNnC...`", parse_mode="MarkdownV2")
+        await update.message.reply_text("Usage: `/sell <CA_ADDRESS>`\nExample: `/sell EoNnC...`", parse_mode="HTML")
         return
 
     ca_address = args[0]
-    await update.message.reply_text(f"Initiating manual sell for CA: `{ca_address}`...", parse_mode="MarkdownV2")
+    await update.message.reply_text(f"Initiating manual sell for CA: `{ca_address}`...", parse_mode="HTML")
     try:
         await trading_bot_instance.handle_manual_sell_command(ca_address)
     except Exception as e:
         logging.error(f"Error in /sell command: {e}", exc_info=True)
-        await update.message.reply_text(f"An unexpected error occurred while processing your sell command: `{e}`", parse_mode="MarkdownV2")
+        await update.message.reply_text(f"An unexpected error occurred while processing your sell command: `{e}`", parse_mode="HTML")
 
 async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles the /report command from Telegram."""
-    await update.message.reply_text("Generating PnL report... This might take a moment.", parse_mode="MarkdownV2")
+    await update.message.reply_text("Generating PnL report... This might take a moment.", parse_mode="HTML")
     try:
         await trading_bot_instance.generate_pnl_report()
     except Exception as e:
         logging.error(f"Error in /report command: {e}", exc_info=True)
-        await update.message.reply_text(f"An unexpected error occurred while generating the report: `{e}`", parse_mode="MarkdownV2")
+        await update.message.reply_text(f"An unexpected error occurred while generating the report: `{e}`", parse_mode="HTML")
 
 async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles the /balance command from Telegram."""
-    await update.message.reply_text("Fetching SOL balance...", parse_mode="MarkdownV2")
+    await update.message.reply_text("Fetching SOL balance...", parse_mode="HTML")
     try:
         sol_balance = await trading_bot_instance.jupiter_client.get_sol_balance()
-        await update.message.reply_text(f"Current SOL balance: `{sol_balance:.6f}` SOL", parse_mode="MarkdownV2")
+        await update.message.reply_text(f"Current SOL balance: `{sol_balance:.6f}` SOL", parse_mode="HTML")
     except Exception as e:
         logging.error(f"Error in /balance command: {e}", exc_info=True)
-        await update.message.reply_text(f"An unexpected error occurred while fetching balance: `{e}`", parse_mode="MarkdownV2")
+        await update.message.reply_text(f"An unexpected error occurred while fetching balance: `{e}`", parse_mode="HTML")
 
-# --- Main Bot Execution ---
-async def main() -> None:
-    """Starts the Telegram bot and background tasks."""
-    # Ensure database tables are created on startup
-    create_db_and_tables()
-    logging.info("Database tables checked/created.")
 
-    # Create the Application and pass your bot's token.
-    if not TELEGRAM_BOT_TOKEN:
-        logging.critical("TELEGRAM_BOT_TOKEN is not set. Please check your .env file.")
-        return
-
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-
-    # Register command handlers
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("buy", buy_command))
-    application.add_handler(CommandHandler("sell", sell_command))
-    application.add_handler(CommandHandler("report", report_command))
-    application.add_handler(CommandHandler("balance", balance_command))
-
-    # Run scheduled tasks (like auto-sell monitoring) as a background asyncio task
-    # This ensures the scheduled tasks run concurrently with the Telegram polling.
-    asyncio.create_task(trading_bot_instance.run_scheduled_tasks())
-
-    logging.info("Starting Telegram bot polling...")
-    # Run the bot until the user presses Ctrl-C
-    # allowed_updates=Update.ALL_TYPES means it processes all types of updates (messages, callbacks, etc.)
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
-
+# --- Main Bot Execution Function ---
+async def start_and_run_bot() -> None:
+    """
+    Sets up the Telegram bot application, registers handlers,
+    starts background tasks, and then runs the bot's polling.
+    """
+    
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        # The main entry point: asyncio.run() directly calls the function
+        # that sets up the bot and then calls application.run_polling().
+        # This is the standard and correct way for python-telegram-bot v20+.
+        # Ensure database tables are created on startup
+        create_db_and_tables()
+        logging.info("Database tables checked/created.")
+
+        # Create the Application and pass your bot's token.
+        if not TELEGRAM_BOT_TOKEN:
+            logging.critical("TELEGRAM_BOT_TOKEN is not set. Please check your .env file.")
+            sys.ext(1)
+
+        application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+        # Register command handlers
+        application.add_handler(CommandHandler("start", start_command))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("buy", buy_command))
+        application.add_handler(CommandHandler("sell", sell_command))
+        application.add_handler(CommandHandler("report", report_command))
+        application.add_handler(CommandHandler("balance", balance_command))
+
+        # Run scheduled tasks (like auto-sell monitoring) as a background asyncio task
+        # This task will run concurrently with the Telegram polling.
+
+        logging.info("Starting Telegram bot polling...")
+        # This is the awaitable that will be passed directly to asyncio.run().
+        # It takes control of the event loop.
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+
     except KeyboardInterrupt:
         logging.info("Bot stopped by user (Ctrl+C).")
     except Exception as e:

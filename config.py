@@ -26,5 +26,20 @@ WSOL_MINT_ADDRESS = "So11111111111111111111111111111111111111112"
 SOL_DECIMALS = 9 # SOL is 9 decimals
 
 # Validate essential configurations
-if not all([SOLANA_RPC_URL, JUPITER_API_URL, PRIVATE_KEY_BASE58, DATABASE_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PNL_WALLET_ADDRESS]):
-    raise ValueError("One or more environment variables are not set. Please check your .env file.")
+# PRIVATE_KEY_BASE58 is not essential if DRY_RUN is True
+essential_configs_check = [
+    ("SOLANA_RPC_URL", SOLANA_RPC_URL),
+    ("JUPITER_API_URL", JUPITER_API_URL),
+    ("DATABASE_URL", DATABASE_URL),
+    ("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN),
+    ("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID),
+    ("PNL_WALLET_ADDRESS", PNL_WALLET_ADDRESS)
+]
+
+if not DRY_RUN: # Only require private key if not in dry run
+    essential_configs_check.append(("PRIVATE_KEY_BASE58", PRIVATE_KEY_BASE58))
+
+missing_vars = [name for name, value in essential_configs_check if not value]
+
+if missing_vars:
+    raise ValueError(f"One or more environment variables are not set. Please check your .env file. Missing: {', '.join(missing_vars)}")
